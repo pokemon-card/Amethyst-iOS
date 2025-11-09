@@ -79,6 +79,12 @@ jobs:
           git commit -am "CI: Update gl4es"
           git push
 
+      - name: Install make
+        continue-on-error: false
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          brew install make
+
       - name: Build for ${{ matrix.platform_name }}
         run: |
           export PATH=/opt/homebrew/bin:$PATH
