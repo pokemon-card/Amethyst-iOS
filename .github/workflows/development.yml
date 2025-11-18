@@ -33,7 +33,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          repository: 'https://github.com/pokemon-card/Amethyst-iOS'
+          repository: 'pokemon-card/Amethyst-iOS'
 
       - name: Checkout repository submodules
         run: git submodule update --init --recursive
