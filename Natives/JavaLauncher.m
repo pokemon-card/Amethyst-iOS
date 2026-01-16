@@ -101,9 +101,11 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
 int launchJVM(NSString *username, id launchTarget, int width, int height, int minVersion) {
     NSLog(@"[JavaLauncher] Beginning JVM launch");
 
-    if (DeviceRequiresTXMWorkaround()) {
+    BOOL requiresTXMWorkaround = DeviceRequiresTXMWorkaround();
+    BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
+    if (requiresTXMWorkaround) {
         void *result = JIT26CreateRegionLegacy(getpagesize());
-        if ((uint32_t)result != (void *)0x690000E0) {
+        if ((uint32_t)result != 0x690000E0) {
             munmap(result, getpagesize());
             // we can't continue since legacy script only allows calling breakpoint once
             [NSFileManager.defaultManager copyItemAtPath:[NSBundle.mainBundle pathForResource:@"UniversalJIT26" ofType:@"js"] toPath:[NSString stringWithFormat:@"%s/UniversalJIT26.js", getenv("POJAV_HOME")] error:nil];
@@ -111,21 +113,14 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
             [PLLogOutputView handleExitCode:1];
             return 1;
         }
+        JIT26SendJITScript([NSString stringWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"UniversalJIT26Extension" ofType:@"js"]]);
+        JIT26SetDetachAfterFirstBr(!jit26AlwaysAttached);
+        // make sure we don't get stuck in EXC_BAD_ACCESS
+        task_set_exception_ports(mach_task_self(), EXC_MASK_BAD_ACCESS, 0, EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
     }
-    
-    BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
-    JIT26SendJITScript([NSString stringWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"UniversalJIT26Extension" ofType:@"js"]]);
-    JIT26SetDetachAfterFirstBr(!jit26AlwaysAttached);
-    // make sure we don't get stuck in EXC_BAD_ACCESS
-    task_set_exception_ports(mach_task_self(), EXC_MASK_BAD_ACCESS, 0, EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
-
-    if ([NSFileManager.defaultManager fileExistsAtPath:[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]] && !@available(iOS 26.0, *)) {
-        NSDebugLog(@"[JavaLauncher] Running in LiveContainer, skipping dyld patch");
-    } else if(!@available(iOS 26.0, *) || jit26AlwaysAttached) {
+    if (!requiresTXMWorkaround || jit26AlwaysAttached) {
         // Activate Library Validation bypass for external runtime and dylibs (JNA, etc)
         init_bypassDyldLibValidation();
-    } else {
-        // Disable Library Validation bypass for iOS 26 TXM because of stricter JIT
     }
 
 
